@@ -24,7 +24,6 @@ class PhotoOrganizer:
 
     def photo_shooting_date(self, file):
         date = None
-        # if os.path.isfile(img_directory + '/' + filename) and any(filename.lower().endswith('.' + ext.lower()) for ext in self.extensions)
         if (any(file.lower().endswith('.' + ext.lower()) for ext in self.exiftool_extensions)):
             EXIFTOOL_DATE_TAG_VIDEOS = "Create Date"
             cmd = "exiftool '%s'" % file
