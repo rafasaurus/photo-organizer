@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 import shutil
-from datetime import datetime
+import datetime
 from PIL import Image
 import argparse
 
@@ -13,7 +13,9 @@ img_directory = None
 
 class PhotoOrganizer:
     DATETIME_EXIF_INFO_ID = 36867
-    extensions = ['jpg', 'jpeg', 'png', 'nef']
+    extensions = ['jpg', 'jpeg', 'png', 'nef', 'mov']
+    # run exiftool for getting datetime rather then PIL
+    exiftool_extensions = ['mov', 'nef']
 
     def folder_path_from_photo_date(self, file):
         date = self.photo_shooting_date(file)
@@ -21,16 +23,34 @@ class PhotoOrganizer:
 
     def photo_shooting_date(self, file):
         date = None
-        photo = Image.open(file)
-        if hasattr(photo, '_getexif'):
-            info = photo._getexif()
-            if info:
-                if self.DATETIME_EXIF_INFO_ID in info:
-                    date = info[self.DATETIME_EXIF_INFO_ID]
-                    date = datetime.strptime(date, '%Y:%m:%d %H:%M:%S')
-        if date is None:
-            date = datetime.fromtimestamp(os.path.getmtime(file))
-        return date
+        # if os.path.isfile(img_directory + '/' + filename) and any(filename.lower().endswith('.' + ext.lower()) for ext in self.extensions)
+        if (any(file.lower().endswith('.' + ext.lower()) for ext in self.exiftool_extensions)):
+            import subprocess
+            EXIFTOOL_DATE_TAG_VIDEOS = "Create Date"
+            cmd = "exiftool '%s'" % file
+            output = subprocess.check_output(cmd, shell=True)
+            lines = output.decode("ascii").split("\n")
+            for l in lines:
+                if EXIFTOOL_DATE_TAG_VIDEOS in l:
+                        datetime_str = l.split(" : ")[1]
+                        date=datetime_str
+                        date = datetime.datetime.strptime(datetime_str,
+                                                         "%Y:%m:%d %H:%M:%S")
+                        break
+            if date is None:
+                date = datetime.datetime.fromtimestamp(os.path.getmtime(file))
+            return date
+        else:
+            photo = Image.open(file)
+            if hasattr(photo, '_getexif'):
+                info = photo._getexif()
+                if info:
+                    if self.DATETIME_EXIF_INFO_ID in info:
+                        date = info[self.DATETIME_EXIF_INFO_ID]
+                        date = datetime.datetime.strptime(date, '%Y:%m:%d %H:%M:%S')
+            if date is None:
+                date = datetime.datetime.fromtimestamp(os.path.getmtime(file))
+            return date
 
     def move_photo(self, file):
         new_folder = self.folder_path_from_photo_date(img_directory + '/' + file)
