@@ -4,6 +4,7 @@ import shutil
 import datetime
 from PIL import Image
 import argparse
+import subprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--directory", type=str,
@@ -25,7 +26,6 @@ class PhotoOrganizer:
         date = None
         # if os.path.isfile(img_directory + '/' + filename) and any(filename.lower().endswith('.' + ext.lower()) for ext in self.extensions)
         if (any(file.lower().endswith('.' + ext.lower()) for ext in self.exiftool_extensions)):
-            import subprocess
             EXIFTOOL_DATE_TAG_VIDEOS = "Create Date"
             cmd = "exiftool '%s'" % file
             output = subprocess.check_output(cmd, shell=True)
@@ -33,9 +33,9 @@ class PhotoOrganizer:
             for l in lines:
                 if EXIFTOOL_DATE_TAG_VIDEOS in l:
                         datetime_str = l.split(" : ")[1]
-                        date=datetime_str
                         date = datetime.datetime.strptime(datetime_str,
                                                          "%Y:%m:%d %H:%M:%S")
+                        # exiftool prints two lines of Create Date tag, getting the first accurance only
                         break
             if date is None:
                 date = datetime.datetime.fromtimestamp(os.path.getmtime(file))
