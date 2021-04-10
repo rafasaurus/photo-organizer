@@ -3,11 +3,17 @@ import os
 import shutil
 from datetime import datetime
 from PIL import Image
+import argparse
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-d", "--directory", type=str,
+	help="image directory", required=False)
+args = vars(parser.parse_args())
+img_directory = None
 
 class PhotoOrganizer:
     DATETIME_EXIF_INFO_ID = 36867
-    extensions = ['jpg', 'jpeg', 'png']
+    extensions = ['jpg', 'jpeg', 'png', 'nef']
 
     def folder_path_from_photo_date(self, file):
         date = self.photo_shooting_date(file)
@@ -27,19 +33,24 @@ class PhotoOrganizer:
         return date
 
     def move_photo(self, file):
-        new_folder = self.folder_path_from_photo_date(file)
+        new_folder = self.folder_path_from_photo_date(img_directory + '/' + file)
         if not os.path.exists(new_folder):
             os.makedirs(new_folder)
-        shutil.move(file, new_folder + '/' + file)
+        shutil.move(img_directory + '/' + file, new_folder + '/' + file)
 
     def organize(self):
         photos = [
-            filename for filename in os.listdir('.')
-                if os.path.isfile(filename) and any(filename.lower().endswith('.' + ext.lower()) for ext in self.extensions)
+            filename for filename in os.listdir(img_directory)
+                if os.path.isfile(img_directory + '/' + filename) and any(filename.lower().endswith('.' + ext.lower()) for ext in self.extensions)
         ]
         for filename in photos:
             self.move_photo(filename)
 
+
+if args.get("directory", False):
+    img_directory = args.get("directory")
+else:
+    img_directory = '.'
 
 PO = PhotoOrganizer()
 PO.organize()
