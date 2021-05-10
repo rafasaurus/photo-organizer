@@ -14,9 +14,9 @@ img_directory = None
 
 class PhotoOrganizer:
     DATETIME_EXIF_INFO_ID = 36867
-    extensions = ['jpg', 'jpeg', 'png', 'nef', 'mov']
+    extensions = ['jpg', 'jpeg', 'png', 'nef', 'mov', 'dng', 'mp4']
     # run exiftool for getting datetime rather then PIL
-    exiftool_extensions = ['mov', 'nef']
+    exiftool_extensions = ['mov', 'nef', 'dng', 'mp4']
 
     def folder_path_from_photo_date(self, file):
         date = self.photo_shooting_date(file)
@@ -52,10 +52,13 @@ class PhotoOrganizer:
             return date
 
     def move_photo(self, file):
-        new_folder = self.folder_path_from_photo_date(img_directory + '/' + file)
-        if not os.path.exists(new_folder):
-            os.makedirs(new_folder)
-        shutil.move(img_directory + '/' + file, new_folder + '/' + file)
+        try:
+            new_folder = self.folder_path_from_photo_date(img_directory + '/' + file)
+            if not os.path.exists(new_folder):
+                os.makedirs(new_folder)
+            shutil.move(img_directory + '/' + file, new_folder + '/' + file)
+        except:
+            print("file error: ", file)
 
     def organize(self):
         photos = [
