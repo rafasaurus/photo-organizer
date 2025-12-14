@@ -32,12 +32,15 @@ class PhotoOrganizer:
                            'nef', 'dng', 'cr2', 'arw', 'orf', 'rw2',
                            'heic', 'heif']
 
-    ISO_PREFIX_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}_\d{6}')
+    DATE_FOLDER_PATTERN = re.compile(r'^(\d{4})-(\d{2})-(\d{2})')
 
     FILENAME_PATTERNS = [
         (re.compile(r'IMG_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'android_camera'),
         (re.compile(r'VID_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'android_video'),
         (re.compile(r'PXL_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'pixel'),
+        (re.compile(r'MVIMG_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'motion_photo'),
+        (re.compile(r'P_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'huawei_photo'),
+        (re.compile(r'V_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'huawei_video'),
         (re.compile(r'Screenshot_(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})'), 'screenshot'),
         (re.compile(r'Screenshot_(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})'), 'screenshot_alt'),
         (re.compile(r'IMG-(\d{4})(\d{2})(\d{2})-WA\d+'), 'whatsapp'),
@@ -46,6 +49,7 @@ class PhotoOrganizer:
         (re.compile(r'video_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})'), 'telegram_video'),
         (re.compile(r'DCIM_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'dcim'),
         (re.compile(r'DSC_?(\d{4})(\d{2})(\d{2})_?(\d{2})(\d{2})(\d{2})'), 'dsc'),
+        (re.compile(r'^(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2})\.(\d{2})'), 'datetime_dots'),
     ]
 
     def __init__(self, inbox: Optional[Path], archive: Path, unsorted: Path,
@@ -65,14 +69,13 @@ class PhotoOrganizer:
         return any(filename.lower().endswith('.' + ext.lower())
                    for ext in self.EXIFTOOL_EXTENSIONS)
 
-    def has_iso_prefix(self, filename: str) -> bool:
-        return bool(self.ISO_PREFIX_PATTERN.match(filename))
-
-    def extract_date_from_iso_prefix(self, filename: str) -> Optional[datetime]:
-        match = self.ISO_PREFIX_PATTERN.match(filename)
+    def extract_date_from_folder(self, folder_name: str) -> Optional[datetime]:
+        match = self.DATE_FOLDER_PATTERN.match(folder_name)
         if match:
-            prefix = match.group(0)
-            return datetime.strptime(prefix, '%Y-%m-%d_%H%M%S')
+            try:
+                return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            except ValueError:
+                return None
         return None
 
     def extract_exif_date(self, filepath: Path) -> Optional[DateResult]:
@@ -181,22 +184,6 @@ class PhotoOrganizer:
 
         return None
 
-    def generate_new_filename(self, filepath: Path, date_result: DateResult) -> str:
-        original_name = filepath.name
-
-        if self.has_iso_prefix(original_name):
-            parts = original_name.split('_', 2)
-            if len(parts) >= 3:
-                original_name = parts[2]
-            elif len(parts) == 2:
-                original_name = parts[1]
-
-        prefix = date_result.date.strftime('%Y-%m-%d_%H%M%S')
-
-        if date_result.subsecond:
-            return f"{prefix}_{date_result.subsecond}_{original_name}"
-        return f"{prefix}_{original_name}"
-
     def get_target_folder(self, date: datetime) -> Path:
         year = date.strftime('%Y')
         date_folder = date.strftime('%Y-%m-%d')
@@ -226,16 +213,16 @@ class PhotoOrganizer:
 
     def is_in_correct_folder(self, filepath: Path, date: datetime) -> bool:
         expected_year = date.strftime('%Y')
-        expected_date = date.strftime('%Y-%m-%d')
+        expected_date_prefix = date.strftime('%Y-%m-%d')
 
         parts = filepath.parts
         if len(parts) < 2:
             return False
 
-        folder_date = parts[-2]
+        folder_name = parts[-2]
         folder_year = parts[-3] if len(parts) >= 3 else None
 
-        return folder_date == expected_date and folder_year == expected_year
+        return folder_name.startswith(expected_date_prefix) and folder_year == expected_year
 
     def process_file(self, filepath: Path) -> bool:
         if not self.has_valid_extension(filepath.name):
@@ -243,15 +230,15 @@ class PhotoOrganizer:
 
         self.logger.info(f"Processing: {filepath}")
 
-        if self.has_iso_prefix(filepath.name):
-            prefix_date = self.extract_date_from_iso_prefix(filepath.name)
-            if prefix_date and self.is_in_correct_folder(filepath, prefix_date):
-                self.logger.debug(f"Skipping already organized: {filepath}")
-                return True
-
         date_result = self.get_date(filepath)
 
         if not date_result:
+            if self.reprocess:
+                folder_name = filepath.parent.name
+                folder_date = self.extract_date_from_folder(folder_name)
+                if folder_date:
+                    self.logger.debug(f"No EXIF but in valid date folder, skipping: {filepath}")
+                    return True
             self.logger.warning(f"No date found, moving to unsorted: {filepath}")
             target_folder = self.get_unsorted_folder()
             target_path = target_folder / filepath.name
@@ -259,14 +246,13 @@ class PhotoOrganizer:
             self._move_file(filepath, target_path)
             return False
 
-        new_filename = self.generate_new_filename(filepath, date_result)
-        target_folder = self.get_target_folder(date_result.date)
-        target_path = target_folder / new_filename
-        target_path = self.resolve_collision(target_path)
-
-        if filepath == target_path:
-            self.logger.debug(f"File already in correct location: {filepath}")
+        if self.is_in_correct_folder(filepath, date_result.date):
+            self.logger.debug(f"File already in correct folder: {filepath}")
             return True
+
+        target_folder = self.get_target_folder(date_result.date)
+        target_path = target_folder / filepath.name
+        target_path = self.resolve_collision(target_path)
 
         self._move_file(filepath, target_path)
         self.logger.info(f"Organized: {filepath.name} -> {target_path} ({date_result.source})")
@@ -351,7 +337,7 @@ def setup_logging(verbose: bool) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Organize photos by date with ISO-prefixed filenames',
+        description='Organize photos into YYYY/YYYY-MM-DD folder structure by EXIF date',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
