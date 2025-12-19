@@ -173,7 +173,7 @@ class PhotoOrganizer:
                     continue
         return None
 
-    def get_date(self, filepath: Path) -> Optional[DateResult]:
+    def get_date(self, filepath: Path) -> DateResult:
         result = self.extract_exif_date(filepath)
         if result:
             return result
@@ -182,7 +182,27 @@ class PhotoOrganizer:
         if result:
             return result
 
-        return None
+        # Fallback to mtime as per Aves sync issue recommendation
+        mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
+        return DateResult(date=mtime, source="mtime")
+
+    def write_exif_date(self, filepath: Path, date: datetime) -> bool:
+        if self.dry_run:
+            self.logger.info(f"[DRY-RUN] Would write EXIF date {date} to {filepath}")
+            return True
+
+        date_str = date.strftime("%Y:%m:%d %H:%M:%S")
+        # -AllDates sets DateTimeOriginal, CreateDate, and ModifyDate
+        tags = ["-AllDates=" + date_str]
+
+        try:
+            # -overwrite_original prevents creating ._original files
+            cmd = ["exiftool", "-overwrite_original"] + tags + [str(filepath)]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            return result.returncode == 0
+        except Exception as e:
+            self.logger.error(f"Failed to write EXIF to {filepath}: {e}")
+            return False
 
     def get_target_folder(self, date: datetime) -> Path:
         year = date.strftime('%Y')
@@ -231,29 +251,33 @@ class PhotoOrganizer:
 
         date_result = self.get_date(filepath)
 
-        if not date_result:
+        if date_result.source == "mtime":
             if self.reprocess:
                 folder_name = filepath.parent.name
                 folder_date = self.extract_date_from_folder(folder_name)
                 if folder_date:
                     self.logger.debug(f"No EXIF but in valid date folder, skipping: {filepath}")
                     return True
-            self.logger.warning(f"No date found, moving to unsorted: {filepath}")
+            self.logger.warning(f"No date found in metadata/filename, moving to unsorted: {filepath}")
             target_folder = self.get_unsorted_folder()
-            target_path = target_folder / filepath.name
-            target_path = self.resolve_collision(target_path)
-            self._move_file(filepath, target_path)
-            return False
+        else:
+            if self.is_in_correct_folder(filepath, date_result.date):
+                self.logger.debug(f"File already in correct folder: {filepath}")
+                # We still might want to write EXIF if it's missing (e.g. filename source)
+                # but we'll skip that for already sorted files unless explicitly requested
+                return True
+            target_folder = self.get_target_folder(date_result.date)
 
-        if self.is_in_correct_folder(filepath, date_result.date):
-            self.logger.debug(f"File already in correct folder: {filepath}")
-            return True
-
-        target_folder = self.get_target_folder(date_result.date)
         target_path = target_folder / filepath.name
         target_path = self.resolve_collision(target_path)
 
         self._move_file(filepath, target_path)
+
+        # Write EXIF if source is filename or mtime to prevent sync date issues
+        if date_result.source != "exif":
+            self.logger.info(f"Baking date ({date_result.date}) into EXIF for {target_path}")
+            self.write_exif_date(target_path, date_result.date)
+
         self.logger.info(f"Organized: {filepath.name} -> {target_path} ({date_result.source})")
         return True
 
