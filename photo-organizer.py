@@ -190,8 +190,7 @@ class PhotoOrganizer:
         return self.archive / year / date_folder
 
     def get_unsorted_folder(self) -> Path:
-        today = datetime.now().strftime('%Y-%m-%d')
-        return self.unsorted / today
+        return self.unsorted / "1970" / "1970-01-01"
 
     def resolve_collision(self, target_path: Path) -> Path:
         if not target_path.exists():
