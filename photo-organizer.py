@@ -49,7 +49,14 @@ class PhotoOrganizer:
         (re.compile(r'video_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})'), 'telegram_video'),
         (re.compile(r'DCIM_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'dcim'),
         (re.compile(r'DSC_?(\d{4})(\d{2})(\d{2})_?(\d{2})(\d{2})(\d{2})'), 'dsc'),
-        (re.compile(r'^(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2})\.(\d{2})'), 'datetime_dots'),
+        # Flexible pattern for YYYY-MM-DD HH.MM.SS or HH:MM:SS or HH-MM-SS or YYYY-MM-DD-HH-MM-SS
+        (re.compile(r'(\d{4})[-._](\d{2})[-._](\d{2})[ _-]?(\d{2})[\.:-]?(\d{2})[\.:-]?(\d{2})'), 'flexible_datetime'),
+        # Generic pattern for YYYYMMDD_HHMMSS or YYYYMMDD-HHMMSS
+        (re.compile(r'(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})'), 'generic_timestamp'),
+        # Generic pattern for YYYY-MM-DD
+        (re.compile(r'(\d{4})-(\d{2})-(\d{2})'), 'generic_date'),
+        # Generic pattern for YYYYMMDD
+        (re.compile(r'(\d{4})(\d{2})(\d{2})'), 'generic_date_compact'),
     ]
 
     def __init__(self, inbox: Optional[Path], archive: Path, unsorted: Path,
