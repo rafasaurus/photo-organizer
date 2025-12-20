@@ -35,6 +35,7 @@ class PhotoOrganizer:
     DATE_FOLDER_PATTERN = re.compile(r'^(\d{4})-(\d{2})-(\d{2})')
 
     FILENAME_PATTERNS = [
+        # Standard patterns with potential suffixes
         (re.compile(r'IMG_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'android_camera'),
         (re.compile(r'VID_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'android_video'),
         (re.compile(r'PXL_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'pixel'),
@@ -49,14 +50,15 @@ class PhotoOrganizer:
         (re.compile(r'video_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})'), 'telegram_video'),
         (re.compile(r'DCIM_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})'), 'dcim'),
         (re.compile(r'DSC_?(\d{4})(\d{2})(\d{2})_?(\d{2})(\d{2})(\d{2})'), 'dsc'),
-        # Flexible pattern for YYYY-MM-DD HH.MM.SS or HH:MM:SS or HH-MM-SS or YYYY-MM-DD-HH-MM-SS
+        
+        # Very flexible datetime patterns for files with edit suffixes (VSCO, Dehancer, etc.)
+        # Catches: 2021-03-27 23.40.28, 2021:03:27-23:40:28, 20210327_234028
         (re.compile(r'(\d{4})[-._](\d{2})[-._](\d{2})[ _-]?(\d{2})[\.:-]?(\d{2})[\.:-]?(\d{2})'), 'flexible_datetime'),
-        # Generic pattern for YYYYMMDD_HHMMSS or YYYYMMDD-HHMMSS
-        (re.compile(r'(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})'), 'generic_timestamp'),
-        # Generic pattern for YYYY-MM-DD
-        (re.compile(r'(\d{4})-(\d{2})-(\d{2})'), 'generic_date'),
-        # Generic pattern for YYYYMMDD
-        (re.compile(r'(\d{4})(\d{2})(\d{2})'), 'generic_date_compact'),
+        
+        # Generic greedy patterns to find dates anywhere in the filename
+        (re.compile(r'.*?(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})'), 'greedy_timestamp'),
+        (re.compile(r'.*?(\d{4})-(\d{2})-(\d{2})'), 'greedy_date'),
+        (re.compile(r'.*?(\d{4})(\d{2})(\d{2})'), 'greedy_date_compact'),
     ]
 
     def __init__(self, inbox: Optional[Path], archive: Path, unsorted: Path,
